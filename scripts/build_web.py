@@ -162,7 +162,9 @@ async def main():
     paths = [
         "./chapters/lotm/webnovel/",
         "./chapters/lotm/oldtl/",
+        "./chapters/lotm/pt-br/",
         "./chapters/coi/webnovel/",
+        "./chapters/coi/pt-br/",
     ]
 
     gh_group("Initialization")
@@ -229,6 +231,14 @@ async def main():
                     "dest": output_dir / "+page.svelte",
                 }
             )
+
+    # Sort chapters ascending by slug (numeric) so listings/TOC are in order
+    for bookID in meta_map:
+        for bookTL in meta_map[bookID]:
+            try:
+                meta_map[bookID][bookTL].sort(key=lambda c: int(c.get("slug", 0)))
+            except (TypeError, ValueError):
+                meta_map[bookID][bookTL].sort(key=lambda c: str(c.get("slug", "")))
 
     # Save Meta JSON
     with open(META_OUTPUT_PATH, "w", encoding="utf-8") as f:

@@ -46,6 +46,17 @@
   let synopsisModal: HTMLDialogElement;
   let tlSelectionModal: HTMLDialogElement;
 
+  const tlLabels: Record<string, string> = {
+    webnovel: "EN — Webnovel",
+    oldtl: "EN — Old TL",
+    "pt-br": "PT-BR",
+    pt_br: "PT-BR",
+    pt: "PT-BR",
+  };
+  function tlLabel(tl: string) {
+    return tlLabels[tl] ?? tl.toUpperCase();
+  }
+
   const availableTLs = $derived(Object.keys(book_meta[bookSlug] || {}));
   const chapters = $derived(book_meta[bookSlug]?.[selectedTL] || []);
 
@@ -265,6 +276,26 @@
             />
           </a>
 
+          {#if availableTLs.includes("pt-br")}
+            <a
+              href="../../read/lotm/pt-br/1"
+              class="btn btn-outline btn-lg justify-between h-auto py-4 group border-primary/30"
+              onclick={() => tlSelectionModal.close()}
+            >
+              <div class="text-left">
+                <div class="font-bold text-base flex items-center gap-2">
+                  Português (BR)
+                  <span class="badge badge-accent badge-sm">Novo</span>
+                </div>
+                <div class="text-xs opacity-60 font-normal mt-1">Tradução local PT-BR (NLLB)</div>
+              </div>
+              <Icon
+                icon="material-symbols:translate-rounded"
+                class="size-6 group-hover:translate-x-1 transition-transform"
+              />
+            </a>
+          {/if}
+
           <div class="divider text-xs opacity-50 my-0">OR</div>
 
           <a
@@ -308,6 +339,26 @@
               class="size-6 group-hover:translate-x-1 transition-transform"
             />
           </a>
+
+          {#if availableTLs.includes("pt-br")}
+            <a
+              href="../../read/coi/pt-br/1"
+              class="btn btn-outline btn-lg justify-between h-auto py-4 group border-primary/30"
+              onclick={() => tlSelectionModal.close()}
+            >
+              <div class="text-left">
+                <div class="font-bold text-base flex items-center gap-2">
+                  Português (BR)
+                  <span class="badge badge-accent badge-sm">Novo</span>
+                </div>
+                <div class="text-xs opacity-60 font-normal mt-1">Tradução local PT-BR (NLLB)</div>
+              </div>
+              <Icon
+                icon="material-symbols:translate-rounded"
+                class="size-6 group-hover:translate-x-1 transition-transform"
+              />
+            </a>
+          {/if}
 
           <div class="divider text-xs opacity-50 my-0">OR</div>
 
@@ -364,7 +415,7 @@
 
       <select class="select select-bordered" bind:value={selectedTL}>
         {#each availableTLs as tl}
-          <option value={tl}>{tl.toUpperCase()}</option>
+          <option value={tl}>{tlLabel(tl)}</option>
         {/each}
       </select>
     </div>

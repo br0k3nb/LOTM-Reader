@@ -1,5 +1,6 @@
 <script lang="ts">
   import Icon from "@iconify/svelte";
+  import { page } from "$app/state";
   import { readerState } from "$lib/reader.svelte.ts";
 
   let { prefs, bookSlug, bookData, navState = $bindable() } = $props();
@@ -82,6 +83,48 @@
     "Courier New",
   ];
 
+  // Helpers: friendly TL labels (multi-language support)
+  const tlLabels: Record<string, string> = {
+    webnovel: "EN — Webnovel",
+    oldtl: "EN — Old TL",
+    "pt-br": "PT-BR",
+    pt_br: "PT-BR",
+    pt: "PT-BR",
+  };
+  function tlLabel(tl: string) {
+    return tlLabels[tl] ?? tl.toUpperCase();
+  }
+
+  // --- Language switcher (multi-language support: EN <-> PT-BR) ---
+  const PT_TLS = ["pt-br", "pt_br", "pt"];
+  // Derive from URL (works in SSR; navState only syncs after hydration)
+  const urlTl = $derived(
+    page.url.pathname.split("/").filter(Boolean)[2] ?? navState.selectedTL
+  );
+  const isPt = $derived(PT_TLS.includes(urlTl));
+  const hasPtBr = $derived(
+    Object.keys(bookData[bookSlug] || {}).some((tl) => PT_TLS.includes(tl))
+  );
+  const enTl = $derived(
+    Object.keys(bookData[bookSlug] || {}).find((tl) => !PT_TLS.includes(tl)) || "webnovel"
+  );
+  const ptTl = $derived(
+    Object.keys(bookData[bookSlug] || {}).find((tl) => PT_TLS.includes(tl)) || "pt-br"
+  );
+  // Same chapter in the other language; fall back to ch.1 if not translated yet
+  // (slug from URL: authoritative in SSR, unlike readerState which fills in later)
+  const urlSlug = $derived(
+    Number(page.url.pathname.split("/").filter(Boolean)[3]) ||
+      Number(readerState.ch_meta.slug) ||
+      1
+  );
+  const switchTarget = $derived.by(() => {
+    const targetTl = isPt ? enTl : ptTl;
+    const chapters = bookData[bookSlug]?.[targetTl] || [];
+    const exists = chapters.some((ch: any) => Number(ch.slug) === urlSlug);
+    return { tl: targetTl, slug: exists ? urlSlug : 1 };
+  });
+
   // Logic
   const chapterList = $derived.by(() => {
     const chapters = bookData[bookSlug]?.[navState.selectedTL] || [];
@@ -155,6 +198,21 @@
       </button>
     </div>
 
+    {#if hasPtBr}
+      <div
+        class="tooltip tooltip-bottom"
+        data-tip={isPt ? "Switch to English" : "Mudar para Português (BR)"}
+      >
+        <a
+          href="/read/{bookSlug}/{switchTarget.tl}/{switchTarget.slug}"
+          class="btn btn-outline btn-sm rounded-btn {isPt ? '' : 'btn-accent'}"
+        >
+          <Icon icon="material-symbols:translate-rounded" class="size-5" />
+          <span class="hidden sm:inline font-bold">{isPt ? "EN" : "PT-BR"}</span>
+        </a>
+      </div>
+    {/if}
+
     <div class="tooltip tooltip-bottom" data-tip="Edit (E)">
       <button
         onclick={openEdit}
@@ -207,7 +265,7 @@
           bind:value={navState.selectedTL}
         >
           {#each Object.keys(bookData[bookSlug] || {}) as tl}
-            <option value={tl}>{tl.toUpperCase()}</option>
+            <option value={tl}>{tlLabel(tl)}</option>
           {/each}
         </select>
       </div>
