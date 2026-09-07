@@ -8,7 +8,9 @@ from collections import defaultdict
 paths = [
     "./chapters/lotm/webnovel/",
     "./chapters/lotm/oldtl/",
+    "./chapters/lotm/pt-br/",
     "./chapters/coi/webnovel/",
+    "./chapters/coi/pt-br/",
 ]
 os.makedirs("./epub", exist_ok=True)
 today = datetime.date.today().strftime("%B %d, %Y")
