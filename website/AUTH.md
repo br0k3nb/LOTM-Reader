@@ -19,6 +19,7 @@ URL or password hashes.
 The account schema uses these tables:
 
 - `reader_users` — normalized email and scrypt password hashes.
+- `reader_google_accounts` — verified Google subjects linked to reader users.
 - `reader_sessions` — hashed, expiring opaque session tokens.
 - `reader_progress` — the newest position for each book and translation.
 - `reader_page_reads` — idempotent daily page events.
@@ -56,8 +57,22 @@ key and therefore cannot be double-counted during retries.
 - The schema currently retains daily page events. Add a retention/export job if
   the project needs long-term analytics.
 
-The account UI is available at the account icon in the reader navigation and
-in the top-right corner of the public book pages.
+## Google sign-in
+
+Google sign-in uses Google Identity Services. Only the public OAuth client ID
+is sent to the browser; the returned ID token is verified server-side against
+Google before a reader session is created. A Google identity is linked to an
+existing reader account when the verified email matches, otherwise a new local
+account is created with an unusable random password.
+
+The Vercel project needs these variables for Production and Preview:
+
+- `GOOGLE_CLIENT_ID` — server-side audience validation.
+- `VITE_GOOGLE_CLIENT_ID` — the same public client ID for the browser button.
+
+In the Google Cloud OAuth client, add `https://lotmreader.vercel.app` as an
+authorized JavaScript origin. The client secret is not needed for the
+Identity Services flow and must not be placed in the browser.
 
 The current adapter is `@sveltejs/adapter-vercel`; the auth and sync endpoints
 are serverless Node routes. Deploying only `website/build/` to a static host

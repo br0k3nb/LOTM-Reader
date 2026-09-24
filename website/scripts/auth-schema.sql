@@ -9,6 +9,15 @@ CREATE TABLE IF NOT EXISTS reader_users (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS reader_google_accounts (
+  provider_subject TEXT PRIMARY KEY,
+  user_id UUID NOT NULL UNIQUE REFERENCES reader_users(id) ON DELETE CASCADE,
+  email TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS reader_google_accounts_user_id_idx
+  ON reader_google_accounts(user_id);
+
 CREATE TABLE IF NOT EXISTS reader_sessions (
   token_hash CHAR(64) PRIMARY KEY,
   user_id UUID NOT NULL REFERENCES reader_users(id) ON DELETE CASCADE,

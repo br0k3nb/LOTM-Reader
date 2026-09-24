@@ -81,6 +81,19 @@ export function ensureAuthSchema(): Promise<void> {
       `;
 
       await sql`
+        CREATE TABLE IF NOT EXISTS reader_google_accounts (
+          provider_subject TEXT PRIMARY KEY,
+          user_id UUID NOT NULL UNIQUE REFERENCES reader_users(id) ON DELETE CASCADE,
+          email TEXT NOT NULL,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `;
+      await sql`
+        CREATE INDEX IF NOT EXISTS reader_google_accounts_user_id_idx
+        ON reader_google_accounts(user_id)
+      `;
+
+      await sql`
         CREATE TABLE IF NOT EXISTS reader_sessions (
           token_hash CHAR(64) PRIMARY KEY,
           user_id UUID NOT NULL REFERENCES reader_users(id) ON DELETE CASCADE,
@@ -304,6 +317,165 @@ export async function authenticateUser(
   }
   if (!(await verifyPassword(password, user.password_hash))) return null;
   return { id: user.id, email: user.email };
+}
+
+export type GoogleIdentity = {
+  subject: string;
+  email: string;
+};
+
+export type GoogleAuthErrorCode =
+  | "not_configured"
+  | "invalid"
+  | "unavailable"
+  | "conflict";
+
+export class GoogleAuthError extends Error {
+  constructor(
+    public readonly code: GoogleAuthErrorCode,
+    message: string,
+  ) {
+    super(message);
+    this.name = "GoogleAuthError";
+  }
+}
+
+function googleClientId(): string | null {
+  const viteEnv = import.meta.env as Record<string, string | undefined>;
+  const value =
+    process.env.GOOGLE_CLIENT_ID ||
+    process.env.VITE_GOOGLE_CLIENT_ID ||
+    viteEnv.GOOGLE_CLIENT_ID ||
+    viteEnv.VITE_GOOGLE_CLIENT_ID;
+  return value?.trim() || null;
+}
+
+/**
+ * Verify a Google Identity Services credential on the server. The browser
+ * never gets to choose the subject or email used to create an account.
+ */
+export async function verifyGoogleCredential(
+  credential: string,
+): Promise<GoogleIdentity> {
+  const clientId = googleClientId();
+  if (!clientId) {
+    throw new GoogleAuthError(
+      "not_configured",
+      "Google sign-in is not configured on this deployment.",
+    );
+  }
+
+  let response: Response;
+  try {
+    response = await fetch(
+      `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(credential)}`,
+      {
+        headers: { accept: "application/json" },
+        signal: AbortSignal.timeout(10_000),
+      },
+    );
+  } catch {
+    throw new GoogleAuthError("unavailable", "Google sign-in is temporarily unavailable.");
+  }
+
+  let claims: Record<string, unknown>;
+  try {
+    claims = (await response.json()) as Record<string, unknown>;
+  } catch {
+    throw new GoogleAuthError("invalid", "Google did not return a valid identity.");
+  }
+
+  if (!response.ok) {
+    throw new GoogleAuthError("invalid", "The Google identity could not be verified.");
+  }
+
+  const audience = Array.isArray(claims.aud) ? claims.aud[0] : claims.aud;
+  const issuer = typeof claims.iss === "string" ? claims.iss : "";
+  const emailVerified =
+    claims.email_verified === true || claims.email_verified === "true";
+  const expiresAt = Number(claims.exp);
+  const subject = typeof claims.sub === "string" ? claims.sub.trim() : "";
+  const email = normalizeEmail(claims.email);
+
+  if (
+    audience !== clientId ||
+    (issuer !== "https://accounts.google.com" && issuer !== "accounts.google.com") ||
+    !emailVerified ||
+    !Number.isFinite(expiresAt) ||
+    expiresAt * 1000 <= Date.now() ||
+    !subject ||
+    subject.length > 255 ||
+    !email
+  ) {
+    throw new GoogleAuthError("invalid", "The Google identity could not be verified.");
+  }
+
+  return { subject, email };
+}
+
+/** Find, link, or create the local reader account for a verified Google identity. */
+export async function authenticateGoogleIdentity(
+  identity: GoogleIdentity,
+): Promise<AuthUser> {
+  await ensureAuthSchema();
+  const sql = db();
+
+  return sql.begin(async (tx) => {
+    const linked = await tx<AuthUser[]>`
+      SELECT u.id, u.email
+      FROM reader_google_accounts g
+      JOIN reader_users u ON u.id = g.user_id
+      WHERE g.provider_subject = ${identity.subject}
+      LIMIT 1
+    `;
+    if (linked[0]) return linked[0];
+
+    const existing = await tx<AuthUser[]>`
+      SELECT id, email
+      FROM reader_users
+      WHERE email = ${identity.email}
+      LIMIT 1
+    `;
+    let user = existing[0];
+
+    if (!user) {
+      // Google-only accounts still receive an unreachable random password
+      // hash, preserving the existing NOT NULL password schema without ever
+      // storing a Google credential or a usable password.
+      const unusablePassword = randomBytes(32).toString("base64url");
+      const passwordHash = await hashPassword(unusablePassword);
+      const inserted = await tx<AuthUser[]>`
+        INSERT INTO reader_users (id, email, password_hash)
+        VALUES (${randomUUID()}, ${identity.email}, ${passwordHash})
+        RETURNING id, email
+      `;
+      user = inserted[0];
+    }
+
+    const link = await tx<{ provider_subject: string }[]>`
+      INSERT INTO reader_google_accounts (provider_subject, user_id, email)
+      VALUES (${identity.subject}, ${user.id}, ${identity.email})
+      ON CONFLICT DO NOTHING
+      RETURNING provider_subject
+    `;
+
+    if (link.length === 0) {
+      const raced = await tx<AuthUser[]>`
+        SELECT u.id, u.email
+        FROM reader_google_accounts g
+        JOIN reader_users u ON u.id = g.user_id
+        WHERE g.provider_subject = ${identity.subject}
+        LIMIT 1
+      `;
+      if (raced[0]) return raced[0];
+      throw new GoogleAuthError(
+        "conflict",
+        "This Google account is already linked to another reader account.",
+      );
+    }
+
+    return user;
+  });
 }
 
 export async function createSession(

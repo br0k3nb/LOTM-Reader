@@ -5,6 +5,7 @@
     authState,
     register,
     signIn,
+    signInWithGoogle,
     signOut,
     startAuth,
   } from "$lib/auth.svelte";
@@ -13,12 +14,36 @@
     startReadingSync,
   } from "$lib/reading-sync";
 
+  type GoogleCredentialResponse = { credential?: string };
+  type GoogleIdentityApi = {
+    accounts: {
+      id: {
+        initialize: (options: {
+          client_id: string;
+          callback: (response: GoogleCredentialResponse) => void;
+          ux_mode: "popup";
+        }) => void;
+        renderButton: (
+          element: HTMLElement,
+          options: Record<string, string | number>,
+        ) => void;
+      };
+    };
+  };
+  type GoogleWindow = Window & { google?: GoogleIdentityApi };
+
+  const googleClientId = (
+    import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined
+  )?.trim();
+
   let accountDialog: HTMLDialogElement;
+  let googleButton: HTMLDivElement;
   let mode: "signin" | "register" = "signin";
   let email = "";
   let password = "";
   let passwordConfirmation = "";
   let localError = "";
+  let googleLoadError = false;
 
   $: user = $authState.user;
   $: busy = $authState.busy;
@@ -29,9 +54,62 @@
   $: pendingPages = $readingSyncState.todayPending;
   $: syncError = $readingSyncState.error;
 
+  function initializeGoogle() {
+    const google = (window as GoogleWindow).google;
+    if (!google || !googleClientId || !googleButton) return;
+
+    google.accounts.id.initialize({
+      client_id: googleClientId,
+      ux_mode: "popup",
+      callback: (response) => void handleGoogleCredential(response),
+    });
+    google.accounts.id.renderButton(googleButton, {
+      theme: "outline",
+      size: "large",
+      shape: "rectangular",
+      text: "continue_with",
+      width: Math.min(360, Math.max(240, googleButton.clientWidth || 320)),
+    });
+  }
+
+  async function handleGoogleCredential(response: GoogleCredentialResponse) {
+    if (!response.credential) return;
+    localError = "";
+    const result = await signInWithGoogle(response.credential);
+    if (!result) return;
+    await startReadingSync();
+    closeAccount();
+  }
+
   onMount(() => {
     startAuth();
     void startReadingSync();
+
+    if (!googleClientId) return;
+    const existing = document.getElementById("google-identity-services") as HTMLScriptElement | null;
+    const googleWindow = window as GoogleWindow;
+    if (googleWindow.google) {
+      initializeGoogle();
+      return;
+    }
+
+    const script = existing || document.createElement("script");
+    const onLoad = () => initializeGoogle();
+    const onError = () => (googleLoadError = true);
+    script.addEventListener("load", onLoad);
+    script.addEventListener("error", onError);
+    if (!existing) {
+      script.id = "google-identity-services";
+      script.src = "https://accounts.google.com/gsi/client";
+      script.async = true;
+      script.defer = true;
+      document.head.appendChild(script);
+    }
+
+    return () => {
+      script.removeEventListener("load", onLoad);
+      script.removeEventListener("error", onError);
+    };
   });
 
   function openAccount() {
@@ -177,6 +255,18 @@
         </div>
 
         <form class="space-y-3" onsubmit={submit}>
+          {#if googleClientId}
+            <div class="divider my-0 text-xs opacity-60">or continue with</div>
+            <div
+              bind:this={googleButton}
+              class="flex min-h-[44px] w-full justify-center overflow-hidden rounded-btn"
+              aria-label="Google sign-in"
+            ></div>
+            {#if googleLoadError}
+              <p class="text-center text-xs text-error">Google sign-in could not load. Try email sign-in.</p>
+            {/if}
+          {/if}
+
           <label class="form-control w-full">
             <span class="label-text mb-1 block text-sm font-medium">Email</span>
             <input

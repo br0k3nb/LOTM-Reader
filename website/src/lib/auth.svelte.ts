@@ -98,6 +98,37 @@ export async function signIn(email: string, password: string): Promise<AuthUser 
   }
 }
 
+export async function signInWithGoogle(credential: string): Promise<AuthUser | null> {
+  authState.update((state) => ({ ...state, busy: true, error: null }));
+  try {
+    const response = await fetch("/api/auth/google", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "content-type": "application/json", accept: "application/json" },
+      body: JSON.stringify({ credential }),
+    });
+    const data = await readJson(response);
+    if (!response.ok) {
+      authState.update((state) => ({
+        ...state,
+        busy: false,
+        error: messageFromResponse(data, "Unable to sign in with Google."),
+      }));
+      return null;
+    }
+    const user = (data as { user: AuthUser }).user;
+    authState.set({ user, ready: true, busy: false, error: null });
+    return user;
+  } catch {
+    authState.update((state) => ({
+      ...state,
+      busy: false,
+      error: "Unable to reach the Google sign-in service.",
+    }));
+    return null;
+  }
+}
+
 export async function register(email: string, password: string): Promise<AuthUser | null> {
   authState.update((state) => ({ ...state, busy: true, error: null }));
   try {
