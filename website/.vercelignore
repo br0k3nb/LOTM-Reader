@@ -1,0 +1,8 @@
+# Build artifacts & local-only files (never upload to Vercel)
+.svelte-kit
+build
+.env
+.env.*
+!.env.example
+*.log
+npm-debug.log*

@@ -1,7 +1,8 @@
 <script lang="ts">
   import Icon from "@iconify/svelte";
   import { page } from "$app/state";
-  import { readerState } from "$lib/reader.svelte.ts";
+  import { readerState } from "$lib/reader.svelte";
+  import AccountMenu from "$lib/reader/AccountMenu.svelte";
 
   let { prefs, bookSlug, bookData, navState = $bindable() } = $props();
 
@@ -230,14 +231,20 @@
         <Icon icon="material-symbols:settings-outline-rounded" class="size-6" />
       </button>
     </div>
+
+    <AccountMenu />
   </nav>
 {:else}
-  <button
-    class="fixed top-4 right-4 z-50 btn btn-circle btn-ghost bg-base-100 shadow-md"
-    onclick={() => (prefs.config.navbarVisible = true)}
-  >
-    <Icon icon="material-symbols:menu-rounded" class="size-6" />
-  </button>
+  <div class="fixed top-3 right-3 z-50 flex items-center gap-1 rounded-btn bg-base-100/90 shadow-md">
+    <AccountMenu />
+    <button
+      class="btn btn-circle btn-ghost"
+      onclick={() => (prefs.config.navbarVisible = true)}
+      aria-label="Show navigation"
+    >
+      <Icon icon="material-symbols:menu-rounded" class="size-6" />
+    </button>
+  </div>
 {/if}
 
 <dialog bind:this={modals.chapter} class="modal modal-bottom sm:modal-middle">

@@ -5,6 +5,7 @@
   import { page } from "$app/state";
   import { goto } from "$app/navigation";
   import imgMeta from "$lib/assets/web-the-fool.jpg?url";
+  import AccountMenu from "$lib/reader/AccountMenu.svelte";
 
   let { children } = $props();
 
@@ -64,5 +65,8 @@
   </div>
 {/if}
 
+<div class="fixed top-3 right-3 z-50 rounded-btn bg-base-100/80 shadow-md backdrop-blur-md">
+  <AccountMenu />
+</div>
 
 {@render children()}

@@ -10,9 +10,16 @@
   // Components
   import Navbar from "$lib/reader/Navbar.svelte";
   import InfoBanner from "$lib/reader/InfoBanner.svelte";
+  import {
+    flushReadingSync,
+    getBestProgress,
+    getCurrentLocalProgress,
+    recordReadingProgress,
+    startReadingSync,
+  } from "$lib/reading-sync";
 
   // Data
-  import { readerState } from "$lib/reader.svelte.ts";
+  import { readerState } from "$lib/reader.svelte";
   import bookData from "$lib/meta.json";
 
   let { children } = $props();
@@ -359,34 +366,79 @@
     if (prevId && nextId && prevId !== nextId) {
       await scrollReaderToTop();
     }
+    // Count the first logical page even when a short chapter is opened and the
+    // reader does not emit a scroll event.
+    handleScroll();
   });
 
   onMount(async () => {
-    if (browser) {
-      const lastRead = JSON.parse(localStorage.getItem("lastRead") || "{}");
-      // Check if saved position matches current URL
-      if (lastRead.slug == currentChapter && lastRead.book === bookSlug) {
-        window.scrollTo({ top: lastRead.scroll, behavior: "instant" });
+    if (!browser) return;
+
+    const applyProgress = (progress: ReturnType<typeof getCurrentLocalProgress>) => {
+      if (!progress) return;
+      if (
+        progress.book !== bookSlug ||
+        progress.tl !== currentTL ||
+        progress.slug !== currentChapter
+      ) {
+        return;
       }
-      window.addEventListener("scroll", handleScroll);
-    }
+
+      requestAnimationFrame(() => {
+        const maxScroll = Math.max(
+          0,
+          document.documentElement.scrollHeight - window.innerHeight,
+        );
+        const target =
+          progress.scrollRatio > 0
+            ? progress.scrollRatio * maxScroll
+            : progress.scroll;
+        window.scrollTo({ top: target, behavior: "instant" });
+      });
+    };
+
+    // Restore the local position immediately, then let an authenticated sync
+    // replace it when another device has a newer position.
+    applyProgress(getCurrentLocalProgress());
+    void startReadingSync().then(async () => {
+      applyProgress(await getBestProgress(bookSlug));
+    });
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("pagehide", handlePageHide);
+    handleScroll();
   });
 
   onDestroy(() => {
-    if (browser) window.removeEventListener("scroll", handleScroll);
+    if (browser) {
+      window.removeEventListener("scroll", handleScroll);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("pagehide", handlePageHide);
+    }
   });
 
+  function handleVisibilityChange() {
+    if (document.visibilityState === "hidden") {
+      handleScroll();
+      flushReadingSync();
+    }
+  }
+
+  function handlePageHide() {
+    handleScroll();
+    flushReadingSync();
+  }
+
   function handleScroll() {
-    localStorage.setItem(
-      "lastRead",
-      JSON.stringify({
-        book: bookSlug,
-        tl: currentTL,
-        slug: currentChapter,
-        scroll: window.scrollY,
-        timestamp: Date.now(),
-      }),
-    );
+    if (!browser) return;
+    recordReadingProgress({
+      book: bookSlug,
+      tl: currentTL,
+      slug: currentChapter,
+      scroll: window.scrollY,
+      documentHeight: document.documentElement.scrollHeight,
+      viewportHeight: window.innerHeight,
+    });
   }
 
   function toggleFullscreen() {

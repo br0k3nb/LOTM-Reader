@@ -1,4 +1,4 @@
-import adapter from "@sveltejs/adapter-static";
+import adapter from "@sveltejs/adapter-vercel";
 import { vitePreprocess } from "@sveltejs/vite-plugin-svelte";
 
 /** @type {import('@sveltejs/kit').Config} */
@@ -8,12 +8,10 @@ const config = {
     vitePreprocess(),
   ],
   kit: {
+    // Vercel: static pages prerender to CDN, chapter routes render on demand
+    // via the Postgres-backed API (see src/routes/api/ + read/[book]/[tl]/[slug]).
     adapter: adapter({
-      pages: "build",
-      assets: "build",
-      fallback: "404.html",
-      precompress: false,
-      strict: true,
+      runtime: "nodejs22.x",
     }),
 
     prerender: {

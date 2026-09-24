@@ -5,6 +5,7 @@
   import imgLotmCover from "$lib/assets/web-lotm-cover.jpg?enhanced&w=9999";
   import imgCoiCover from "$lib/assets/web-coi-cover.jpg?enhanced&w=9999";
   import book_meta from "$lib/meta.json";
+  import { getBestProgress } from "$lib/reading-sync";
 
   const bookConfigs = {
     lotm: {
@@ -33,14 +34,23 @@
   };
 
   // --- Reactive Logic ---
-  const bookSlug = $derived(page.params.book || "lotm");
+  type BookSlug = keyof typeof bookConfigs;
+  const bookSlug = $derived((page.params.book || "lotm") as BookSlug);
   const book = $derived(bookConfigs[bookSlug]);
 
   // State
+  type ContinueData = {
+    book: string;
+    tl: string;
+    slug: number;
+    scroll: number;
+    timestamp: number;
+  };
+
   let searchQuery = $state("");
   let selectedTL = $state("webnovel");
   let isReversed = $state(false);
-  let continueData = $state(null); // State to store lastRead data
+  let continueData = $state<ContinueData | null>(null); // State to store lastRead data
 
   // Modal References
   let synopsisModal: HTMLDialogElement;
@@ -57,8 +67,11 @@
     return tlLabels[tl] ?? tl.toUpperCase();
   }
 
-  const availableTLs = $derived(Object.keys(book_meta[bookSlug] || {}));
-  const chapters = $derived(book_meta[bookSlug]?.[selectedTL] || []);
+  const bookMeta = $derived(
+    (book_meta[bookSlug] || {}) as Record<string, any[]>,
+  );
+  const availableTLs = $derived(Object.keys(bookMeta));
+  const chapters = $derived(bookMeta[selectedTL] || []);
 
   const filteredChapters = $derived(() => {
     const list = chapters.filter(
@@ -71,19 +84,28 @@
 
   // --- Handlers ---
 
-  onMount(() => {
-    // Check for existing progress
+  onMount(async () => {
+    // Start with the local position so the page is useful offline, then merge
+    // the newer position from the signed-in account when one is available.
     const stored = localStorage.getItem("lastRead");
     if (stored) {
       try {
         const data = JSON.parse(stored);
-        // Only valid if it matches the current book we are viewing
-        if (data.book === bookSlug) {
-          continueData = data;
-        }
+        if (data.book === bookSlug) continueData = data;
       } catch (e) {
         console.error("Failed to parse reading history", e);
       }
+    }
+
+    const cloudProgress = await getBestProgress(bookSlug);
+    if (cloudProgress) {
+      continueData = {
+        book: cloudProgress.book,
+        tl: cloudProgress.tl,
+        slug: cloudProgress.slug,
+        scroll: cloudProgress.scroll,
+        timestamp: cloudProgress.updatedAt,
+      };
     }
   });
 

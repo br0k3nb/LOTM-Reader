@@ -6,7 +6,7 @@ scripts/misc/_misc/
 scripts/misc/_misc2/
 scripts/misc/_misc3/
 scripts/misc/discussions1.py
-website/src/routes/(reader)/read/**
+# The reader route is maintained as a dynamic SvelteKit endpoint.
 epub
 website/static/assets/images/**
 sample

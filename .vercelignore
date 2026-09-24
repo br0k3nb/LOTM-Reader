@@ -1,0 +1,15 @@
+# Keep Vercel uploads lean: only website/ sources + images/ are needed.
+# Chapter text comes from Neon at runtime; EPUBs/caches never deploy.
+website/node_modules
+website/.svelte-kit
+website/build
+website/.vercel
+website/.env
+website/.env.*
+!website/.env.example
+chapters
+epub
+images_default
+images_legacy
+scripts/.translation_*
+.vercel
