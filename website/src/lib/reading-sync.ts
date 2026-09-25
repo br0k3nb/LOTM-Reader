@@ -17,6 +17,9 @@ const MAX_PENDING_EVENTS = 5_000;
 const SYNC_DEBOUNCE_MS = 1_200;
 
 export type ReadingSyncState = {
+  /** Lifetime unique chapters reached, keyed by `${book}\\u0000${tl}`. */
+  chapters: Record<string, number>;
+
   todayPages: number;
   daily: Record<string, number>;
   todayPending: number;
@@ -29,6 +32,7 @@ export type ReadingSyncState = {
 export const readingSyncState = writable<ReadingSyncState>({
   todayPages: 0,
   daily: {},
+  chapters: {},
   todayPending: 0,
   syncing: false,
   online: true,
@@ -41,6 +45,8 @@ type ProgressWithMeta = ReadingProgress;
 
 let started = false;
 let currentUserId: string | null = null;
+let remoteChapters: Record<string, number> = {};
+
 let unsubscribeAuth: (() => void) | null = null;
 let remoteProgress = new Map<string, ReadingProgress>();
 let remoteDaily: Record<string, number> = {};
@@ -178,17 +184,53 @@ function localProgressUserKey(): string {
   return currentUserId || "anonymous";
 }
 
-function readProgressForUser(userId: string): ProgressWithMeta | null {
-  const namespaced = normalizeProgress(
-    parseJson(localStorage.getItem(progressStorageKey(userId))),
-  );
-  if (namespaced) return namespaced;
+function readProgressMap(userId: string): Record<string, ProgressWithMeta> {
+  const raw = parseJson<Record<string, unknown>>(localStorage.getItem(progressStorageKey(userId)));
+  if (!raw || typeof raw !== "object") return {};
+
+  // Before per-book progress was stored, the namespaced value held one object
+  // directly. Migrate that shape without discarding the user's last position.
+  const legacy = normalizeProgress(raw);
+  if (legacy) return { [progressKey(legacy.book, legacy.tl)]: legacy };
+
+  const map: Record<string, ProgressWithMeta> = {};
+  for (const value of Object.values(raw)) {
+    const progress = normalizeProgress(value);
+    if (progress) map[progressKey(progress.book, progress.tl)] = progress;
+  }
+  return map;
+}
+
+function readProgressForUser(
+  userId: string,
+  book?: string,
+  tl?: string,
+): ProgressWithMeta | null {
+  const map = readProgressMap(userId);
+  if (book && tl) {
+    // A reader route must not restore another translation's position. The
+    // shared legacy value is handled below only when it matches this scope.
+    const exact = map[progressKey(book, tl)];
+    if (exact) return exact;
+  } else if (book) {
+    const latest = Object.values(map)
+      .filter((progress) => progress.book === book)
+      .sort((a, b) => b.updatedAt - a.updatedAt)[0];
+    if (latest) return latest;
+  } else {
+    const latest = Object.values(map).sort((a, b) => b.updatedAt - a.updatedAt)[0];
+    if (latest) return latest;
+  }
 
   const owner = localStorage.getItem(PROGRESS_OWNER_KEY);
   // A shared lastRead value is guest data only when it has no owner. This keeps
   // a later account from accidentally uploading another account's position.
   if (owner && owner !== userId) return null;
-  return readSharedProgress();
+  const shared = readSharedProgress();
+  if (!shared || (book && shared.book !== book) || (tl && shared.tl !== tl)) {
+    return null;
+  }
+  return shared;
 }
 
 function writeLocalProgress(progress: ProgressWithMeta, userId: string | null): void {
@@ -207,7 +249,9 @@ function writeLocalProgress(progress: ProgressWithMeta, userId: string | null): 
     }),
   );
   if (userId) {
-    localStorage.setItem(progressStorageKey(userId), JSON.stringify(progress));
+    const progressMap = readProgressMap(userId);
+    progressMap[progressKey(progress.book, progress.tl)] = progress;
+    localStorage.setItem(progressStorageKey(userId), JSON.stringify(progressMap));
     localStorage.setItem(PROGRESS_OWNER_KEY, userId);
   } else {
     localStorage.removeItem(PROGRESS_OWNER_KEY);
@@ -289,23 +333,21 @@ function applyRemoteState(data: ReadingStateResponse): void {
   remoteProgress = new Map();
   for (const progress of data.progress) {
     remoteProgress.set(progressKey(progress.book, progress.tl), progress);
-    const local = currentUserId ? readProgressForUser(currentUserId) : null;
-    // Only replace the single shared Continue Reading value when it belongs to
-    // this same book/translation, or when there is no local value yet. The
-    // per-account cache still retains progress for every book.
-    if (
-      local &&
-      (local.book !== progress.book || local.tl !== progress.tl || local.updatedAt >= progress.updatedAt)
-    ) {
-      continue;
-    }
+    const local = currentUserId
+      ? readProgressForUser(currentUserId, progress.book, progress.tl)
+      : null;
+    // Only replace a local position for this exact book/translation. The
+    // per-account cache retains progress for every book and translation.
+    if (local && local.updatedAt >= progress.updatedAt) continue;
     writeLocalProgress(progress, currentUserId);
   }
   remoteDaily = data.daily || {};
+  remoteChapters = data.chapters || {};
   readingSyncState.update((state) => ({
     ...state,
     todayPages: Number(remoteDaily[todayKey()] || 0),
     daily: { ...remoteDaily },
+    chapters: { ...remoteChapters },
     online: true,
     error: null,
   }));
@@ -570,7 +612,13 @@ export async function startReadingSync(): Promise<void> {
         }
         remoteProgress = new Map();
         remoteDaily = {};
-        readingSyncState.update((state) => ({ ...state, daily: {}, todayPages: 0 }));
+        remoteChapters = {};
+        readingSyncState.update((state) => ({
+          ...state,
+          daily: {},
+          chapters: {},
+          todayPages: 0,
+        }));
         initialSync = null;
         updatePendingState(null);
         return;
@@ -590,7 +638,7 @@ export async function startReadingSync(): Promise<void> {
 export async function getBestProgress(book: string): Promise<ReadingProgress | null> {
   if (!browser) return null;
   await startReadingSync();
-  const local = readProgressForUser(localProgressUserKey());
+  const local = readProgressForUser(localProgressUserKey(), book);
   const candidates = [...remoteProgress.values()].filter((item) => item.book === book);
   const remote = candidates.sort((a, b) => b.updatedAt - a.updatedAt)[0];
   if (remote && (!local || local.book !== book || remote.updatedAt > local.updatedAt)) {
@@ -600,9 +648,12 @@ export async function getBestProgress(book: string): Promise<ReadingProgress | n
   return local?.book === book ? local : null;
 }
 
-export function getCurrentLocalProgress(): ReadingProgress | null {
+export function getCurrentLocalProgress(
+  book?: string,
+  tl?: string,
+): ReadingProgress | null {
   if (!browser) return null;
-  return readProgressForUser(localProgressUserKey());
+  return readProgressForUser(localProgressUserKey(), book, tl);
 }
 
 export function stopReadingSync(): void {

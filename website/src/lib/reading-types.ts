@@ -20,4 +20,6 @@ export type PageReadEvent = {
 export type ReadingStateResponse = {
   progress: ReadingProgress[];
   daily: Record<string, number>;
+  /** Lifetime count of unique chapter slugs reached, keyed by book and translation. */
+  chapters?: Record<string, number>;
 };

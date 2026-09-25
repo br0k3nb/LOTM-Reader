@@ -232,11 +232,11 @@
       </button>
     </div>
 
-    <AccountMenu />
+    <AccountMenu scope={{ book: bookSlug, tl: urlTl }} />
   </nav>
 {:else}
   <div class="fixed top-3 right-3 z-50 flex items-center gap-1 rounded-btn bg-base-100/90 shadow-md">
-    <AccountMenu />
+    <AccountMenu scope={{ book: bookSlug, tl: urlTl }} />
     <button
       class="btn btn-circle btn-ghost"
       onclick={() => (prefs.config.navbarVisible = true)}

@@ -399,7 +399,7 @@
 
     // Restore the local position immediately, then let an authenticated sync
     // replace it when another device has a newer position.
-    applyProgress(getCurrentLocalProgress());
+    applyProgress(getCurrentLocalProgress(bookSlug, currentTL));
     void startReadingSync().then(async () => {
       applyProgress(await getBestProgress(bookSlug));
     });

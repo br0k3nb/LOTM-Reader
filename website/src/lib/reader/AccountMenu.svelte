@@ -53,6 +53,14 @@
     .slice(0, 7);
   $: pendingPages = $readingSyncState.todayPending;
   $: syncError = $readingSyncState.error;
+  export let scope: { book: string; tl: string } | null = null;
+  $: chapterKey = scope ? `${scope.book}\u0000${scope.tl}` : null;
+  $: chaptersRead = chapterKey
+    ? Number($readingSyncState.chapters[chapterKey] || 0)
+    : Object.values($readingSyncState.chapters).reduce(
+        (total, count) => total + Number(count || 0),
+        0,
+      );
 
   function initializeGoogle() {
     const google = (window as GoogleWindow).google;
@@ -197,6 +205,17 @@
               {/if}
             </div>
           </div>
+          <div class="stat px-5 py-4">
+            <div class="stat-title">Chapters read</div>
+            <div class="stat-value text-3xl text-secondary">{chaptersRead}</div>
+            <div class="stat-desc">
+              {#if scope}
+                Unique chapters in this book and translation
+              {:else}
+                Unique chapters across all books and translations
+              {/if}
+            </div>
+          </div>
         </div>
 
         {#if recentDays.length > 0}
@@ -233,7 +252,7 @@
             {mode === "signin" ? "Sign in to sync" : "Create an account"}
           </h2>
           <p class="mt-2 text-sm opacity-70">
-            Keep your last chapter and daily page count available on every device.
+            Keep your last chapter, chapters read, and daily page count available on every device.
           </p>
         </div>
 

@@ -41,29 +41,43 @@ export async function getReadingState(
 ): Promise<ReadingStateResponse> {
   await ensureAuthSchema();
   const sql = db();
-  const progressRows = book
-    ? await sql<ProgressRow[]>`
-        SELECT book, tl, slug, scroll_y, scroll_ratio, page_index, updated_at
-        FROM reader_progress
-        WHERE user_id = ${userId} AND book = ${book}
-        ORDER BY updated_at DESC
-      `
-    : await sql<ProgressRow[]>`
-        SELECT book, tl, slug, scroll_y, scroll_ratio, page_index, updated_at
-        FROM reader_progress
-        WHERE user_id = ${userId}
-        ORDER BY updated_at DESC
-        LIMIT 50
-      `;
-
-  const dailyRows = await sql<{ reading_date: string | Date; pages: number }[]>`
-    SELECT to_char(reading_date, 'YYYY-MM-DD') AS reading_date, COUNT(*)::int AS pages
-    FROM reader_page_reads
-    WHERE user_id = ${userId}
-      AND reading_date >= CURRENT_DATE - INTERVAL '90 days'
-    GROUP BY reading_date
-    ORDER BY reading_date DESC
-  `;
+  const [progressRows, dailyRows, chapterRows] = await Promise.all([
+    book
+      ? sql<ProgressRow[]>`
+          SELECT book, tl, slug, scroll_y, scroll_ratio, page_index, updated_at
+          FROM reader_progress
+          WHERE user_id = ${userId} AND book = ${book}
+          ORDER BY updated_at DESC
+        `
+      : sql<ProgressRow[]>`
+          SELECT book, tl, slug, scroll_y, scroll_ratio, page_index, updated_at
+          FROM reader_progress
+          WHERE user_id = ${userId}
+          ORDER BY updated_at DESC
+          LIMIT 50
+        `,
+    sql<{ reading_date: string | Date; pages: number }[]>`
+      SELECT to_char(reading_date, 'YYYY-MM-DD') AS reading_date, COUNT(*)::int AS pages
+      FROM reader_page_reads
+      WHERE user_id = ${userId}
+        AND reading_date >= CURRENT_DATE - INTERVAL '90 days'
+      GROUP BY reading_date
+      ORDER BY reading_date DESC
+    `,
+    book
+      ? sql<{ book: string; tl: string; chapters: number }[]>`
+          SELECT book, tl, COUNT(DISTINCT slug)::int AS chapters
+          FROM reader_page_reads
+          WHERE user_id = ${userId} AND book = ${book}
+          GROUP BY book, tl
+        `
+      : sql<{ book: string; tl: string; chapters: number }[]>`
+          SELECT book, tl, COUNT(DISTINCT slug)::int AS chapters
+          FROM reader_page_reads
+          WHERE user_id = ${userId}
+          GROUP BY book, tl
+        `,
+  ]);
 
   const daily: Record<string, number> = {};
   for (const row of dailyRows) {
@@ -74,9 +88,15 @@ export async function getReadingState(
     daily[date] = Number(row.pages);
   }
 
+  const chapters: Record<string, number> = {};
+  for (const row of chapterRows) {
+    chapters[`${row.book}\u0000${row.tl}`] = Number(row.chapters);
+  }
+
   return {
     progress: progressRows.map(toProgress),
     daily,
+    chapters,
   };
 }
 
