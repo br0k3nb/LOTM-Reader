@@ -52,6 +52,22 @@
   let isReversed = $state(false);
   let continueData = $state<ContinueData | null>(null); // State to store lastRead data
 
+  function setContinueData(data: ContinueData) {
+    continueData = data;
+    // Show the exact stopped chapter immediately, even when the user reads a
+    // translation other than the default English source.
+    if (bookMeta[data.tl]) selectedTL = data.tl;
+  }
+
+  function isStoppedChapter(chapter: { slug: number }): boolean {
+    return Boolean(
+      continueData &&
+        continueData.book === bookSlug &&
+        continueData.tl === selectedTL &&
+        Number(continueData.slug) === Number(chapter.slug),
+    );
+  }
+
   // Modal References
   let synopsisModal: HTMLDialogElement;
   let tlSelectionModal: HTMLDialogElement;
@@ -91,7 +107,7 @@
     if (stored) {
       try {
         const data = JSON.parse(stored);
-        if (data.book === bookSlug) continueData = data;
+        if (data.book === bookSlug) setContinueData(data);
       } catch (e) {
         console.error("Failed to parse reading history", e);
       }
@@ -99,13 +115,13 @@
 
     const cloudProgress = await getBestProgress(bookSlug);
     if (cloudProgress) {
-      continueData = {
+      setContinueData({
         book: cloudProgress.book,
         tl: cloudProgress.tl,
         slug: cloudProgress.slug,
         scroll: cloudProgress.scroll,
         timestamp: cloudProgress.updatedAt,
-      };
+      });
     }
   });
 
@@ -447,7 +463,8 @@
         {#each filteredChapters() as ch}
           <a
             href="../../read/{bookSlug}/{selectedTL}/{ch.slug}"
-            class="btn {book.button_secondary} btn-soft justify-start h-auto py-4 text-left shadow-sm hover:scale-[1.01] transition-transform relative w-full overflow-hidden"
+            class="btn {book.button_secondary} btn-soft justify-start h-auto py-4 text-left shadow-sm hover:scale-[1.01] transition-transform relative w-full overflow-hidden {isStoppedChapter(ch) ? 'ring-2 ring-accent ring-inset bg-accent/10' : ''}"
+            aria-current={isStoppedChapter(ch) ? "location" : undefined}
           >
             <div class="flex flex-col w-full min-w-0 pr-12">
               <span class="text-xs opacity-60 font-mono">CHAPTER {ch.slug}</span
@@ -458,6 +475,15 @@
               >
                 {ch.title}
               </span>
+
+              {#if isStoppedChapter(ch)}
+                <span
+                  class="badge badge-accent badge-sm absolute right-2 bottom-2 gap-1 text-[10px] font-bold uppercase tracking-wider"
+                >
+                  <Icon icon="material-symbols:bookmark" class="size-3" />
+                  Stopped here
+                </span>
+              {/if}
 
               {#if ch.category}
                 <span
