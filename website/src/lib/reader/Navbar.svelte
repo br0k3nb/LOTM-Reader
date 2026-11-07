@@ -3,6 +3,7 @@
   import { page } from "$app/state";
   import { readerState } from "$lib/reader.svelte";
   import AccountMenu from "$lib/reader/AccountMenu.svelte";
+  import StreakChip from "$lib/habits/ui/StreakChip.svelte";
 
   let { prefs, bookSlug, bookData, navState = $bindable() } = $props();
 
@@ -232,10 +233,12 @@
       </button>
     </div>
 
+    <StreakChip compact />
     <AccountMenu scope={{ book: bookSlug, tl: urlTl }} />
   </nav>
 {:else}
   <div class="fixed top-3 right-3 z-50 flex items-center gap-1 rounded-btn bg-base-100/90 shadow-md">
+    <StreakChip compact />
     <AccountMenu scope={{ book: bookSlug, tl: urlTl }} />
     <button
       class="btn btn-circle btn-ghost"

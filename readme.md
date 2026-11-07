@@ -33,6 +33,7 @@ Learn more about the author, **Cuttlefish That Loves Diving**:
 * **Custom Themes:** Multiple themes to fit the atmosphere of the stories.
 * **High-Quality Illustrations:** Official art and community-curated illustrations have been added to the site to enhance immersion.
 * **Reader Settings:** Customize your reading experience with adjustable font size, line height, and more.
+* **Streaks, Goals & Achievements:** Daily XP goals, reading streaks with freezes and rescues, daily quests, mystery chests, a weekly challenge, Sequence ranks and 65 achievements on the [Progress page](https://lotmreader.vercel.app/progress/). Signed in, they sync with the Android app.
 * **EPUB Downloads:** Download the complete volumes as EPUB files for offline reading on your Kindle, Kobo, or phone.
 * **Community Driven:** The website is built with the latest fan translations and can be edited by the community. That includes you, too!
 * **Privacy Focused:** The website does **NOT** have any kind of trackers or ads. We prefer the purity of the Beyonder characteristics.

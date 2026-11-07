@@ -57,3 +57,14 @@ CREATE TABLE IF NOT EXISTS reader_page_reads (
 );
 CREATE INDEX IF NOT EXISTS reader_page_reads_user_date_idx
   ON reader_page_reads(user_id, reading_date DESC);
+
+-- Reading habits (streaks, XP, quests, rewards, achievements) merged across the
+-- website and the Android app. `data` holds the sync protocol v1 document
+-- (src/lib/habits/sync.ts); `applied` remembers recent delta ids so a retried
+-- upload is applied once.
+CREATE TABLE IF NOT EXISTS reader_habits (
+  user_id UUID PRIMARY KEY REFERENCES reader_users(id) ON DELETE CASCADE,
+  data JSONB NOT NULL,
+  applied TEXT[] NOT NULL DEFAULT '{}',
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);

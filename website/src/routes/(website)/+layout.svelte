@@ -6,6 +6,8 @@
   import { goto } from "$app/navigation";
   import imgMeta from "$lib/assets/web-the-fool.jpg?url";
   import AccountMenu from "$lib/reader/AccountMenu.svelte";
+  import StreakChip from "$lib/habits/ui/StreakChip.svelte";
+  import CelebrationHost from "$lib/habits/ui/CelebrationHost.svelte";
 
   let { children } = $props();
 
@@ -65,8 +67,11 @@
   </div>
 {/if}
 
-<div class="fixed top-3 right-3 z-50 rounded-btn bg-base-100/80 shadow-md backdrop-blur-md">
+<div class="fixed top-3 right-3 z-50 flex items-center gap-1 rounded-btn bg-base-100/80 shadow-md backdrop-blur-md">
+  <StreakChip />
   <AccountMenu />
 </div>
+
+<CelebrationHost />
 
 {@render children()}

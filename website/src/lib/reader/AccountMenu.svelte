@@ -239,6 +239,11 @@
           <div class="alert alert-warning text-sm">{syncError}. Your local progress is safe and will retry later.</div>
         {/if}
 
+        <a href="/progress/" class="btn btn-soft btn-primary w-full" onclick={closeAccount}>
+          <Icon icon="ic:round-local-fire-department" class="size-5" />
+          Streaks, goals &amp; achievements
+        </a>
+
         <button type="button" class="btn btn-outline btn-error w-full" onclick={logout} disabled={busy}>
           {#if busy}<span class="loading loading-spinner loading-sm"></span>{/if}
           Sign out
@@ -252,7 +257,7 @@
             {mode === "signin" ? "Sign in to sync" : "Create an account"}
           </h2>
           <p class="mt-2 text-sm opacity-70">
-            Keep your last chapter, chapters read, and daily page count available on every device.
+            Keep your last chapter, chapters read, daily pages, streaks and achievements in sync on every device, including the Android app.
           </p>
         </div>
 

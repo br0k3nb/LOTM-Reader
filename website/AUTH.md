@@ -23,6 +23,8 @@ The account schema uses these tables:
 - `reader_sessions` — hashed, expiring opaque session tokens.
 - `reader_progress` — the newest position for each book and translation.
 - `reader_page_reads` — idempotent daily page events.
+- `reader_habits` — the merged reading-habit record (streaks, XP, rewards,
+  achievements) shared with the Android app, plus recently applied upload ids.
 
 ## Sync behavior
 
@@ -81,3 +83,36 @@ Use the Vercel deployment (or move these endpoints to a separate compatible
 API) before enabling sign-in. For a manual Vercel deploy, set
 `POSTGRES_URL`/`POSTGRES_URL_NON_POOLING` in the project environment, apply
 `website/scripts/auth-schema.sql`, and run the normal SvelteKit build.
+
+## Reading habits (shared with the Android app)
+
+The `/progress/` page is the web version of the Android app's Progress tab:
+XP (2 per 800px logical page, 25 per finished chapter), daily goals, streaks
+with freezes and same-day rescues, flame tiers and XP multipliers, focus
+sessions, daily quests, the daily mystery chest, the weekly challenge, levels
+and Sequence ranks, insights, a heatmap and 65 achievements. The rules live in
+`src/lib/habits/constants.ts` and `engine.ts`, a port of the app's
+`lib/habit_store.dart`; keep the two in step. The reader records the same
+scroll stream it already sends to reading sync, shows an XP HUD, and queues
+level-up/achievement/milestone celebrations for the next non-reader page.
+
+Habits work without an account (stored in `localStorage` under
+`readerHabits:anonymous`). Signing in merges this browser's progress into the
+account. Each account's record is merged across devices through
+`GET`/`POST /api/reading/habits` (protocol v1, `src/lib/habits/sync.ts`):
+
+- a client sends `diff(local, base)` with a unique id; the server applies it
+  once under a row lock (`reader_habits.applied` keeps the last 200 ids) and
+  returns the merged record, which becomes the client's new `base`;
+- a pending upload is retried with the same id until confirmed, so a lost
+  response never double-counts; changes made in flight are replayed on top;
+- counters and per-day totals add up across devices, records take the
+  maximum, dated sets are unions (a once-only reward earned on two offline
+  devices — goal day, freeze, quest bonus, chest, weekly tier, chapter — is
+  refunded once), and the daily goal is last-writer-wins;
+- reminders and the HUD toggle stay per device; reminders are Android-only.
+
+`npm run test:habits` runs the engine and merge tests. `npm run test:habits --
+--write-vectors` regenerates `src/lib/habits/habit-sync-vectors.json`; copy it
+to the Android repo's `test/fixtures/habit_sync_vectors.json`, whose
+`test/habit_sync_test.dart` proves the Dart merge produces identical results.

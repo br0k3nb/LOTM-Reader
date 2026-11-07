@@ -17,6 +17,8 @@
     recordReadingProgress,
     startReadingSync,
   } from "$lib/reading-sync";
+  import { recordHabitReading, startHabits } from "$lib/habits/store.svelte";
+  import ReaderHud from "$lib/habits/ui/ReaderHud.svelte";
 
   // Data
   import { readerState } from "$lib/reader.svelte";
@@ -400,6 +402,7 @@
     // Restore the local position immediately, then let an authenticated sync
     // replace it when another device has a newer position.
     applyProgress(getCurrentLocalProgress(bookSlug, currentTL));
+    startHabits();
     void startReadingSync().then(async () => {
       applyProgress(await getBestProgress(bookSlug));
     });
@@ -431,13 +434,22 @@
 
   function handleScroll() {
     if (!browser) return;
-    recordReadingProgress({
+    const progress = recordReadingProgress({
       book: bookSlug,
       tl: currentTL,
       slug: currentChapter,
       scroll: window.scrollY,
       documentHeight: document.documentElement.scrollHeight,
       viewportHeight: window.innerHeight,
+    });
+    // Same page stream as account sync feeds streaks, XP and quests; the app
+    // records identical events, and both merge into one habit record.
+    recordHabitReading({
+      book: bookSlug,
+      tl: currentTL,
+      slug: currentChapter,
+      scroll: progress.scroll,
+      ratio: progress.scrollRatio,
     });
   }
 
@@ -569,6 +581,8 @@
       </a>
     </div>
   </main>
+
+  <ReaderHud />
 
   {#if prefs.config.showBottomBanner}
     <InfoBanner />
